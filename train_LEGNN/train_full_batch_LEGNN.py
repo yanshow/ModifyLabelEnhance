@@ -6,7 +6,7 @@ import os
 import shutil
 import logging
 import time
-
+import dgl
 import sys
 cur_path = os.path.abspath(os.path.dirname(__file__))
 root_path = os.path.split(cur_path)[0]
@@ -14,13 +14,15 @@ path_project = os.path.split(root_path)[0]
 sys.path.append(root_path)
 sys.path.append(path_project)
 
-from utils.utils import set_random_seed, convert_to_gpu, get_n_params, get_optimizer, get_lr_scheduler, load_dataset, save_model_results, \
+from utils.utils import set_random_seed, convert_to_gpu,convert_to_tensor, get_n_params, get_optimizer, get_lr_scheduler, load_dataset, save_model_results, \
     generate_hetero_graph, add_connections_between_labels_nodes, get_train_predict_truth_idx, get_loss_func
 from utils.full_batch_utils import train_model, evaluate_model, get_final_performance
 from model.LEGNN import LEGAT
 from model.Classifier import Classifier
 from utils.EarlyStopping import EarlyStopping
 
+from utils.hypergraph_construct import graph_construct_kNN
+from dataset.dataloader_mnist import dataset_mnist_cifar10_imbalance as loader
 args = {
     'dataset': 'ogbn-arxiv',
     'predict_category': 'node',
@@ -43,7 +45,16 @@ args = {
     'patience': 200,
     'num_runs': 10
 }
-args['device'] = f'cuda:{args["cuda"]}' if torch.cuda.is_available() and args["cuda"] >= 0 else 'cpu'
+
+import argparse
+parser = argparse.ArgumentParser( description='Train Density-fusion Hypergraph Convolutional Attention Network (D-HGCAT)')
+parser.add_argument('--n_class', type=int, default=10, help='Number of class.')
+parser.add_argument('--n_label', type=int, default=250, metavar='n_label', help="number of labeled data")
+parser.add_argument('--n_sample', type=int, default=3820, metavar='n_label', help="number of sample")
+parser.add_argument('--n_val', type=int, default=500, metavar='n_label', help="number of val data")
+parser.add_argument('--root_dir', default='../data/mnist_imbalance/mnist_imbalance.mat', type=str, metavar='FILE', help='dir of image data')
+myArgs = parser.parse_args()
+
 
 if __name__ == '__main__':
     warnings.filterwarnings('ignore')
@@ -74,9 +85,20 @@ if __name__ == '__main__':
         # add the handlers to logger
         logger.addHandler(fh)
         logger.addHandler(ch)
+        print(args)
+        features, labels, train_idx, valid_idx, test_idx = loader.load_data(myArgs)
+        print("Graph construct...")
+        H = graph_construct_kNN(features)
+        features, labels, train_idx, valid_idx, test_idx = convert_to_tensor(features, labels, train_idx, valid_idx,test_idx)
+        import scipy.sparse as sp
+        adj_matrix = sp.coo_matrix(H) # 转成稀疏
+        # adj_matrix=adj_matrix = torch.sparse_coo_tensor(torch.LongTensor([adj_matrix.row, adj_matrix.col]), torch.FloatTensor(adj_matrix.data))
+        graph = dgl.graph((adj_matrix.row,adj_matrix.col))
 
-        graph, labels, num_classes, train_idx, valid_idx, test_idx = load_dataset(root_path='../dataset', dataset_name=args['dataset'])
-
+        graph.ndata['feat'] = features
+        num_classes=myArgs.n_class
+        # graph, labels, num_classes, train_idx, valid_idx, test_idx = load_dataset(root_path='../dataset', dataset_name=args['dataset'])
+        # num_classes=labels.max().item()+1
         graph = generate_hetero_graph(graph, num_classes)
 
         evaluate_graph = add_connections_between_labels_nodes(graph, labels, train_idx)

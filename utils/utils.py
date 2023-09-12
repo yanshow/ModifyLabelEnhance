@@ -9,13 +9,33 @@ import os
 import torch.nn.functional as F
 import json
 from ogb.nodeproppred import Evaluator
+def l2_normalize(X, dim=1):
+    norm_th = torch.nn.functional.normalize(X, p=2, dim=dim, eps=1e-12)
+    return norm_th
 
+def img_normalize_mnist(img):
+    img = img.astype(np.float32) / 255.0   #归一化为[0.0,1.0]
+    means=np.mean(img)
+    stdevs=np.std(img)
+    img = (img - means) / stdevs
+    return img
 
 # convert the inputs from cpu to gpu, accelerate the running speed
 def convert_to_gpu(*data, device: str):
     res = []
     for item in data:
         item = item.to(device)
+        res.append(item)
+    if len(res) > 1:
+        res = tuple(res)
+    else:
+        res = res[0]
+    return res
+
+def convert_to_tensor(*data):
+    res = []
+    for item in data:
+        item = torch.from_numpy(item)
         res.append(item)
     if len(res) > 1:
         res = tuple(res)
