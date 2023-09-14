@@ -13,7 +13,6 @@ root_path = os.path.split(cur_path)[0]
 path_project = os.path.split(root_path)[0]
 sys.path.append(root_path)
 sys.path.append(path_project)
-
 from utils.utils import set_random_seed, convert_to_gpu,convert_to_tensor, get_n_params, get_optimizer, get_lr_scheduler, load_dataset, save_model_results, \
     generate_hetero_graph, add_connections_between_labels_nodes, get_train_predict_truth_idx, get_loss_func
 from utils.full_batch_utils import train_model, evaluate_model, get_final_performance
@@ -43,7 +42,8 @@ args = {
     'weight_decay': 0,
     'epochs': 2000,
     'patience': 200,
-    'num_runs': 10
+    'num_runs': 10,
+    'device':'cuda:0'
 }
 
 import argparse
@@ -90,6 +90,10 @@ if __name__ == '__main__':
         print("Graph construct...")
         H = graph_construct_kNN(features)
         features, labels, train_idx, valid_idx, test_idx = convert_to_tensor(features, labels, train_idx, valid_idx,test_idx)
+        train_idx=train_idx.to(torch.long)
+        valid_idx=valid_idx.to(torch.long)
+        test_idx=test_idx.to(torch.long)
+        labels=labels.to(torch.long)
         import scipy.sparse as sp
         adj_matrix = sp.coo_matrix(H) # 转成稀疏
         # adj_matrix=adj_matrix = torch.sparse_coo_tensor(torch.LongTensor([adj_matrix.row, adj_matrix.col]), torch.FloatTensor(adj_matrix.data))
